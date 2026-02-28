@@ -6,6 +6,7 @@ import tensorflow as tf
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
 from sklearn.utils import resample as bootstrap_resample
 from tqdm import tqdm
+import ast
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -34,6 +35,24 @@ def compute_metrics(y_true, y_prob):
         'auc': auc
     }
 
+class FocalLoss(tf.keras.losses.Loss):
+    def __init__(self, gamma=2.0, alpha=None, name='focal_loss'):
+        super().__init__(name=name)
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def call(self, y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        epsilon = tf.keras.backend.epsilon()
+        y_pred = tf.clip_by_value(y_pred, epsilon, 1.0 - epsilon)
+        pos_loss = -y_true * tf.math.pow(1.0 - y_pred, self.gamma) * tf.math.log(y_pred)
+        neg_loss = -(1.0 - y_true) * tf.math.pow(y_pred, self.gamma) * tf.math.log(1.0 - y_pred)
+        loss = pos_loss + neg_loss
+        if self.alpha is not None:
+            alpha = tf.cast(self.alpha, tf.float32)
+            loss = loss * alpha
+        return tf.reduce_mean(tf.reduce_sum(loss, axis=-1))
+
 def run_external_validation():
     print("Starting External Validation on Chapman-Shaoxing Dataset...")
     
@@ -49,41 +68,56 @@ def run_external_validation():
     df = pd.read_csv(meta_path)
     
     # 2. Map Chapman labels to PTB-XL 5-class Taxonomy
-    # NORM -> 0
-    # MI-equiv -> 1
-    # STTC -> 2
-    # CD -> 3
-    # HYP -> 4
-    
-    # Values from Diagnostics.csv (Rhythm column/Others)
-    # This mapping is critical for EV-4 and EV-5
-    # For now, we use the Rhythm column and map based on common medical definitions
+    # Classes: ['NORM', 'MI', 'STTC', 'CD', 'HYP']
     
     classes = ['NORM', 'MI', 'STTC', 'CD', 'HYP']
-    mapping = {
-        'SB': 'NORM', 'SR': 'NORM', 'ST': 'NORM', # Sinus rhythms
-        'AF': 'STTC', 'AFIB': 'STTC', 'SVT': 'STTC', # Arrhythmias often mixed with STTC
-        'MI': 'MI', 'AMI': 'MI', 'IMI': 'MI', 'LMI': 'MI',
-        'LBBB': 'CD', 'RBBB': 'CD', 'AVB': 'CD', 'PVC': 'CD',
-        'LVH': 'HYP', 'RVH': 'HYP'
-    }
     
-    # Note: A real mapping would involve more columns like 'Rhythm' and 'Condition'
-    # For this script we assume a simplified mapping or that labels are present
+    # Refined mapping based on SNOMED-CT acronyms in Chapman headers
+    mapping = {
+        # NORM
+        'SB': 'NORM', 'SR': 'NORM', 'ST': 'NORM', 'SA': 'NORM',
+        # MI
+        'MI': 'MI', 'AMI': 'MI', 'IMI': 'MI', 'LMI': 'MI', 'MIBW': 'MI', 
+        'MIFW': 'MI', 'MILW': 'MI', 'MISW': 'MI', 'AQW': 'MI',
+        # STTC
+        'STDD': 'STTC', 'STE': 'STTC', 'STTC': 'STTC', 'STTU': 'STTC', 
+        'TWC': 'STTC', 'TWO': 'STTC', 'AFIB': 'STTC', 'AF': 'STTC', 
+        'SVT': 'STTC', 'AT': 'STTC', 'AVNRT': 'STTC', 'AVRT': 'STTC',
+        # CD
+        'LBBB': 'CD', 'RBBB': 'CD', '1AVB': 'CD', '2AVB': 'CD', '2AVB1': 'CD', 
+        '2AVB2': 'CD', '3AVB': 'CD', 'AVB': 'CD', 'VPB': 'CD', 'APB': 'CD', 
+        'IVB': 'CD', 'IDC': 'CD', 'JEB': 'CD', 'JPT': 'CD',
+        # HYP
+        'LVH': 'HYP', 'RVH': 'HYP', 'RAH': 'HYP'
+    }
     
     y_true = []
     keep_indices = []
     
     for i, row in df.iterrows():
-        rhythm = row.get('Rhythm', '')
-        # Simple heuristic mapping for demonstration
-        mapped = None
-        if rhythm in mapping:
-            mapped = mapping[rhythm]
+        # labels column contains a string representation of a list: "['SB', 'LVH']"
+        labels_str = row.get('labels', '[]')
+        try:
+            labels = ast.literal_eval(labels_str)
+        except:
+            labels = []
+            
+        mapped_classes = set()
+        for l in labels:
+            if l in mapping:
+                mapped_classes.add(mapping[l])
         
-        if mapped:
-            y_true.append(classes.index(mapped))
-            keep_indices.append(i)
+        # If multiple superclasses, we pick one or skip for simplicity in a 5-class multi-class setup (argmax)
+        if mapped_classes:
+            chosen = None
+            for c in classes:
+                if c in mapped_classes:
+                    chosen = c
+                    break
+            
+            if chosen:
+                y_true.append(classes.index(chosen))
+                keep_indices.append(i)
             
     X = X[keep_indices]
     y_true = np.array(y_true)
@@ -98,12 +132,13 @@ def run_external_validation():
         
     print(f"Loading ensemble of {len(model_files)} models...")
     models = []
+    custom_objects = {'FocalLoss': FocalLoss}
     for mf in model_files:
         try:
-            m = tf.keras.models.load_model(os.path.join(MODEL_DIR, mf))
+            m = tf.keras.models.load_model(os.path.join(MODEL_DIR, mf), custom_objects=custom_objects)
             models.append(m)
-        except:
-            print(f"Warning: Failed to load {mf}")
+        except Exception as e:
+            print(f"Warning: Failed to load {mf} - {e}")
             
     # 4. Predict
     all_probs = []

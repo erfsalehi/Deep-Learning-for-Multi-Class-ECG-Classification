@@ -6,21 +6,12 @@ import pandas as pd
 from scipy.signal import butter, filtfilt, iirnotch, resample
 import ast
 from tqdm import tqdm
+import re
 
-ZIP_PATH = os.path.join("data", "raw", "chapman.zip")
+# Paths
 TARGET_DIR = os.path.join("data", "raw", "chapman")
 PROCESSED_DIR = os.path.join("data", "processed", "chapman")
-
-def extract_chapman():
-    print(f"Extracting Chapman-Shaoxing dataset...")
-    os.makedirs(TARGET_DIR, exist_ok=True)
-    if os.path.exists(ZIP_PATH):
-        with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
-            # Assuming the zip contains a main folder, we extract everything
-            zip_ref.extractall(TARGET_DIR)
-        print("Extraction complete!")
-    else:
-        print(f"Zip file {ZIP_PATH} not found.")
+SNOMED_MAPPING_PATH = os.path.join(TARGET_DIR, "ConditionNames_SNOMED-CT.csv")
 
 def apply_filter(signal_1d, fs):
     # Butterworth bandpass 0.5 - 40 Hz
@@ -37,93 +28,114 @@ def apply_filter(signal_1d, fs):
     
     return filtered
 
-def find_extracted_dir(base_dir):
-    # The zip might extract to a subfolder like 'a-large-scale-12-lead-electrocardiogram-database-for-arrhythmia-study-1.0.0'
-    for root, dirs, files in os.walk(base_dir):
-        if 'Diagnostics.csv' in files:
-            return root
-    return base_dir
+def get_snomed_mapping():
+    if not os.path.exists(SNOMED_MAPPING_PATH):
+        print(f"Warning: {SNOMED_MAPPING_PATH} not found. Using empty mapping.")
+        return {}
+    df = pd.read_csv(SNOMED_MAPPING_PATH)
+    # Map Snomed_CT to Acronym Name
+    mapping = dict(zip(df['Snomed_CT'].astype(str), df['Acronym Name']))
+    return mapping
+
+def extract_labels_from_header(header_path, mapping):
+    """Extracts diagnostic codes from .hea file and maps them to acronyms."""
+    dx_codes = []
+    with open(header_path, 'r') as f:
+        for line in f:
+            if line.startswith('#Dx:'):
+                codes = line.split(':')[-1].strip().split(',')
+                for code in codes:
+                    acronym = mapping.get(code.strip(), code.strip())
+                    dx_codes.append(acronym)
+    return dx_codes
 
 def preprocess_and_save():
     print(f"Preprocessing dataset and saving to {PROCESSED_DIR}...")
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     
-    data_root = find_extracted_dir(TARGET_DIR)
-    csv_path = os.path.join(data_root, 'Diagnostics.csv')
+    snomed_map = get_snomed_mapping()
     
-    if not os.path.exists(csv_path):
-        print(f"Could not find Diagnostics.csv in {data_root}.")
+    # Use RECORDS file to find all records
+    records_file = os.path.join(TARGET_DIR, 'RECORDS')
+    if not os.path.exists(records_file):
+        print(f"Error: {records_file} not found.")
         return
 
-    records_df = pd.read_csv(csv_path)
-    
+    with open(records_file, 'r') as f:
+        record_paths = [line.strip() for line in f if line.strip()]
+
     X = []
     y_meta = []
     
-    for _, row in tqdm(records_df.iterrows(), total=len(records_df)):
-        filename = row['FileName']
-        
-        # Determine paths
-        # Given PhysioNet structure, it usually is under WFDBRecords/01/01001 etc.
-        # However, filename usually includes subdir or we can just find it
-        if '_' in filename:
-            subdir = filename.split('_')[0]
-            record_path = os.path.join(data_root, 'WFDBRecords', subdir, filename)
-        else:
-            record_path = os.path.join(data_root, 'WFDBRecords', filename)
-            if not os.path.exists(record_path + '.dat'):
-                record_path = os.path.join(data_root, filename)
+    for rel_path in tqdm(record_paths):
+        # rel_path might be like "WFDBRecords/01/010/"
+        # We need to find the .mat and .hea files in that directory
+        full_dir = os.path.join(TARGET_DIR, rel_path)
+        if not os.path.isdir(full_dir):
+            continue
+
+        for filename in os.listdir(full_dir):
+            if filename.endswith(".hea"):
+                record_id = filename.replace(".hea", "")
+                header_path = os.path.join(full_dir, filename)
+                record_path = os.path.join(full_dir, record_id)
                 
-        try:
-            record = wfdb.rdrecord(record_path)
-            sig = record.p_signal
-            fs = record.fs
-            
-            processed_leads = []
-            for lead_idx in range(sig.shape[1]):
-                lead_sig = sig[:, lead_idx]
-                
-                # 1. Bandpass & Notch
-                filtered = apply_filter(lead_sig, fs)
-                
-                # 2. Downsample to 100Hz
-                target_len = int(len(filtered) * 100 / fs)
-                downsampled = resample(filtered, target_len)
-                
-                # 3. Z-score normalization
-                mean_val = np.mean(downsampled)
-                std_val = np.std(downsampled)
-                if std_val > 1e-6:
-                    normalized = (downsampled - mean_val) / std_val
-                else:
-                    normalized = downsampled - mean_val
+                try:
+                    # 1. Extract Labels
+                    labels = extract_labels_from_header(header_path, snomed_map)
                     
-                processed_leads.append(normalized)
-            
-            # Stack to get (1000, 12)
-            processed_sig = np.column_stack(processed_leads)
-            
-            # Fix shape
-            if processed_sig.shape[0] > 1000:
-                processed_sig = processed_sig[:1000, :]
-            elif processed_sig.shape[0] < 1000:
-                pad_width = 1000 - processed_sig.shape[0]
-                processed_sig = np.pad(processed_sig, ((0, pad_width), (0, 0)), 'constant')
-            
-            X.append(processed_sig)
-            y_meta.append(row.to_dict())
-            
-        except Exception as e:
-            pass
+                    # 2. Load Signal
+                    record = wfdb.rdrecord(record_path)
+                    sig = record.p_signal
+                    fs = record.fs
+                    
+                    processed_leads = []
+                    for lead_idx in range(sig.shape[1]):
+                        lead_sig = sig[:, lead_idx]
+                        
+                        # Apply Filters
+                        filtered = apply_filter(lead_sig, fs)
+                        
+                        # Downsample to 100Hz
+                        target_len = 1000 # 10 seconds at 100Hz
+                        downsampled = resample(filtered, target_len)
+                        
+                        # Z-score normalization
+                        mean_val = np.mean(downsampled)
+                        std_val = np.std(downsampled)
+                        if std_val > 1e-6:
+                            normalized = (downsampled - mean_val) / std_val
+                        else:
+                            normalized = downsampled - mean_val
+                            
+                        processed_leads.append(normalized)
+                    
+                    # Stack to get (1000, 12)
+                    processed_sig = np.column_stack(processed_leads)
+                    
+                    X.append(processed_sig)
+                    y_meta.append({
+                        'record_id': record_id,
+                        'labels': labels,
+                        'age': record.comments[0].split(':')[-1].strip() if len(record.comments) > 0 else '',
+                        'sex': record.comments[1].split(':')[-1].strip() if len(record.comments) > 1 else ''
+                    })
+                    
+                except Exception as e:
+                    # print(f"Error processing {record_id}: {e}")
+                    pass
 
     X = np.array(X)
-    np.save(os.path.join(PROCESSED_DIR, 'X_chapman.npy'), X)
+    print(f"Final X shape: {X.shape}")
     
-    out_df = pd.DataFrame(y_meta)
-    out_df.to_csv(os.path.join(PROCESSED_DIR, 'chapman_database.csv'), index=False)
-    
-    print(f"Processed shape: {X.shape}")
+    if len(X) > 0:
+        np.save(os.path.join(PROCESSED_DIR, 'X_chapman.npy'), X)
+        
+        out_df = pd.DataFrame(y_meta)
+        out_df.to_csv(os.path.join(PROCESSED_DIR, 'chapman_database.csv'), index=False)
+        print(f"Successfully processed {len(X)} records.")
+    else:
+        print("No records processed successfully.")
 
 if __name__ == "__main__":
-    extract_chapman()
     preprocess_and_save()

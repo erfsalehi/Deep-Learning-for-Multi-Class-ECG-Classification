@@ -5,15 +5,16 @@ import sys
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+import ast
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.models.se_resnet import create_se_resnet
-from src.data.multiclass_loader import MultiClassECGDataGenerator, load_ptbxl_data
+from src.data.multiclass_loader import NpyECGDataGenerator
 
 # Set paths
-DATA_PATH = 'data/raw/ptbxl/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/'
+PROCESSED_DATA_PATH = 'data/processed/ptbxl/'
 OUTPUT_DIR = 'results/models/'
 LOG_DIR = 'results/logs/'
 
@@ -23,40 +24,49 @@ os.makedirs(LOG_DIR, exist_ok=True)
 def train_se_resnet():
     # 1. Config
     BATCH_SIZE = 32
-    EPOCHS = 15
-    LIMIT = None 
+    EPOCHS = 8
     
     # 2. Load Data
-    print("Loading PTB-XL data for SE-ResNet Multi-class Classification...")
-    try:
-        df = load_ptbxl_data(DATA_PATH)
-    except FileNotFoundError:
-        print(f"Error: Could not find data at {DATA_PATH}")
+    print("Loading Preprocessed PTB-XL data for SE-ResNet Classification...")
+    X_path = os.path.join(PROCESSED_DATA_PATH, 'X_ptbxl.npy')
+    meta_path = os.path.join(PROCESSED_DATA_PATH, 'ptbxl_database_processed.csv')
+    
+    if not os.path.exists(X_path):
+        print(f"Error: Processed data not found at {X_path}. Run preprocess_ptbxl.py first.")
         return
 
-    if LIMIT:
-        df = df.head(LIMIT)
+    X = np.load(X_path)
+    df = pd.read_csv(meta_path)
+    df['diagnostic_superclass'] = df['diagnostic_superclass'].apply(ast.literal_eval)
     
-    # 3. Split
+    # 3. Prepare Multi-label targets
+    classes = ['NORM', 'MI', 'STTC', 'CD', 'HYP']
+    y = np.zeros((len(df), len(classes)))
+    for i, row in df.iterrows():
+        for c_idx, cl in enumerate(classes):
+            if cl in row['diagnostic_superclass']:
+                y[i, c_idx] = 1
+    
+    # 4. Split
     df['primary_class'] = df['diagnostic_superclass'].apply(lambda x: x[0] if len(x) > 0 else 'Unknown')
-    df = df[df['primary_class'] != 'Unknown']
+    train_idx, val_idx = train_test_split(np.arange(len(X)), test_size=0.15, random_state=42, stratify=df['primary_class'])
     
-    train_df, val_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['primary_class'])
+    X_train, X_val = X[train_idx], X[val_idx]
+    y_train, y_val = y[train_idx], y[val_idx]
     
-    print(f"Training on {len(train_df)} samples, Validating on {len(val_df)} samples")
+    print(f"X_train shape: {X_train.shape}, X_val shape: {X_val.shape}")
     
-    # 4. Generators
-    train_gen = MultiClassECGDataGenerator(train_df, DATA_PATH, batch_size=BATCH_SIZE)
-    val_gen = MultiClassECGDataGenerator(val_df, DATA_PATH, batch_size=BATCH_SIZE)
+    # 5. Generators
+    train_gen = NpyECGDataGenerator(X_train, y_train, batch_size=BATCH_SIZE)
+    val_gen = NpyECGDataGenerator(X_val, y_val, batch_size=BATCH_SIZE, shuffle=False)
     
-    # 5. Model
-    model = create_se_resnet(num_classes=5)
-    
+    # 6. Model
+    model = create_se_resnet(num_classes=len(classes))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
-                  loss='categorical_crossentropy', 
-                  metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
+                  loss='binary_crossentropy', 
+                  metrics=['accuracy', tf.keras.metrics.AUC(name='auc', multi_label=True)])
     
-    # 6. Train
+    # 7. Train
     print("Starting SE-ResNet training...")
     history = model.fit(
         train_gen,
@@ -69,20 +79,19 @@ def train_se_resnet():
         ]
     )
     
-    # 7. Plot History
+    # 8. Plot History
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 2, 1)
     plt.plot(history.history['loss'], label='Train Loss')
     plt.plot(history.history['val_loss'], label='Val Loss')
-    plt.legend()
-    plt.title('Loss')
+    plt.legend(); plt.title('Loss')
     
     plt.subplot(1, 2, 2)
     plt.plot(history.history['accuracy'], label='Train Acc')
     plt.plot(history.history['val_accuracy'], label='Val Acc')
-    plt.legend()
-    plt.title('Accuracy')
+    plt.legend(); plt.title('Accuracy')
     
+    os.makedirs('results/figures/', exist_ok=True)
     plt.savefig('results/figures/se_resnet_training_history.png')
     print("Training complete! Model saved to results/models/se_resnet_best.keras")
 

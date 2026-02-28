@@ -6,14 +6,15 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss
+import ast
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data.multiclass_loader import MultiClassECGDataGenerator, load_ptbxl_data
+from src.data.multiclass_loader import NpyECGDataGenerator
 
 # Set paths
-DATA_PATH = 'data/raw/ptbxl/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/'
+PROCESSED_DATA_PATH = 'data/processed/ptbxl/'
 MODEL_PATH = 'results/models/se_resnet_best.keras'
 FIGURES_DIR = 'results/figures/'
 RESULTS_DIR = 'results/'
@@ -27,7 +28,6 @@ def expected_calibration_error(y_true, y_prob, n_bins=10):
     
     ece = 0
     for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
-        # Determine points in this bin
         in_bin = np.logical_and(y_prob > bin_lower, y_prob <= bin_upper)
         prop_in_bin = np.mean(in_bin)
         
@@ -42,27 +42,21 @@ def evaluate_calibration():
     print("Starting Calibration Analysis...")
     
     # 1. Load Data
-    try:
-        df = load_ptbxl_data(DATA_PATH)
-    except FileNotFoundError:
-        print(f"Error: Could not find data at {DATA_PATH}")
+    X_path = os.path.join(PROCESSED_DATA_PATH, 'X_ptbxl.npy')
+    meta_path = os.path.join(PROCESSED_DATA_PATH, 'ptbxl_database_processed.csv')
+    
+    if not os.path.exists(X_path):
+        print(f"Error: Processed data not found at {X_path}. Run preprocess_ptbxl.py first.")
         return
 
+    X = np.load(X_path)
+    df = pd.read_csv(meta_path)
+    df['diagnostic_superclass'] = df['diagnostic_superclass'].apply(ast.literal_eval)
+
     # Use test split (fold 10 is standard for PTB-XL)
-    test_df = df[df.strat_fold == 10].copy()
-    test_df['primary_class'] = test_df['diagnostic_superclass'].apply(lambda x: x[0] if len(x) > 0 else 'Unknown')
-    test_df = test_df[test_df['primary_class'] != 'Unknown']
-    
-    # 2. Load Model
-    if not os.path.exists(MODEL_PATH):
-        print(f"Error: Model not found at {MODEL_PATH}. Please train the model first.")
-        return
-    
-    model = tf.keras.models.load_model(MODEL_PATH)
-    
-    # 3. Predict
-    test_gen = MultiClassECGDataGenerator(test_df, DATA_PATH, batch_size=32, shuffle=False)
-    y_prob = model.predict(test_gen)
+    test_idx = df[df.strat_fold == 10].index.values
+    X_test = X[test_idx]
+    test_df = df.iloc[test_idx].copy()
     
     # Get ground truth
     classes = ['NORM', 'MI', 'STTC', 'CD', 'HYP']
@@ -73,6 +67,24 @@ def evaluate_calibration():
             if cls_name in diagnoses:
                 y_true[i, c_idx] = 1
 
+    # 2. Load Model
+    if not os.path.exists(MODEL_PATH):
+        # Try finding any model in the directory if the baseline isn't there yet
+        model_files = [f for f in os.listdir('results/models/') if f.endswith('.keras')]
+        if model_files:
+            MODEL_PATH_ACTUAL = os.path.join('results/models/', model_files[0])
+            print(f"Primary model not found, using {MODEL_PATH_ACTUAL} instead.")
+        else:
+            print(f"Error: No model found in results/models/. Please train a model first.")
+            return
+    else:
+        MODEL_PATH_ACTUAL = MODEL_PATH
+    
+    model = tf.keras.models.load_model(MODEL_PATH_ACTUAL)
+    
+    # 3. Predict
+    y_prob = model.predict(X_test, batch_size=32)
+    
     # 4. Compute ECE and Plot Reliability Diagrams
     ece_results = {}
     
@@ -85,7 +97,6 @@ def evaluate_calibration():
         ece = expected_calibration_error(true, prob)
         ece_results[cls_name] = ece
         
-        # Only plot NORM and HYP in the main output figure per PRD
         if cls_name in ['NORM', 'HYP']:
             idx = 1 if cls_name == 'NORM' else 2
             plt.subplot(1, 2, idx)

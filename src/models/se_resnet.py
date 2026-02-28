@@ -72,7 +72,7 @@ def create_se_resnet(input_shape=(1000, 12), num_classes=5):
     x = layers.GlobalAveragePooling1D()(x)
     x = layers.Dense(128, activation='relu')(x)
     x = layers.Dropout(0.5)(x)
-    outputs = layers.Dense(num_classes, activation='softmax')(x)
+    outputs = layers.Dense(num_classes, activation='sigmoid')(x)
     
     model = models.Model(inputs=inputs, outputs=outputs, name="SE_ResNet")
     return model

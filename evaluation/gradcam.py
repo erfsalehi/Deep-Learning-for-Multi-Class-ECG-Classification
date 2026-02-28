@@ -5,14 +5,15 @@ import sys
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2
+import ast
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data.multiclass_loader import MultiClassECGDataGenerator, load_ptbxl_data
+from src.data.multiclass_loader import NpyECGDataGenerator
 
 # Set paths
-DATA_PATH = 'data/raw/ptbxl/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/'
+PROCESSED_DATA_PATH = 'data/processed/ptbxl/'
 MODEL_PATH = 'results/models/se_resnet_best.keras'
 FIGURES_DIR = 'results/figures/'
 
@@ -31,43 +32,24 @@ class GradCAM:
             conv_outputs, predictions = self.grad_model(inputs)
             loss = predictions[:, class_idx]
 
-        # Extract gradients with respect to the output of the convolutional layer
         grads = tape.gradient(loss, conv_outputs)
-
-        # Guided gradients
         guided_grads = tf.cast(conv_outputs > 0, 'float32') * tf.cast(grads > 0, 'float32') * grads
-
-        # Compute average gradient per feature map
         weights = tf.reduce_mean(guided_grads, axis=(0, 1))
-
-        # Build Grad-CAM heatmap
         cam = tf.reduce_sum(tf.multiply(weights, conv_outputs), axis=-1)
-        
-        # Apply ReLU
         heatmap = tf.maximum(cam, 1e-10)
-        
-        # Normalize
         heatmap = heatmap / tf.reduce_max(heatmap)
         return heatmap.numpy()
 
 def plot_gradcam(signal, heatmap, title, save_path):
-    # signal shape (1000, 12)
-    # heatmap shape (variable size, depending on layer) - need to resize to 1000
-    
     heatmap_resized = cv2.resize(heatmap[0], (1, 1000))
     heatmap_resized = heatmap_resized.flatten()
     
     fig, axes = plt.subplots(12, 1, figsize=(10, 20), sharex=True)
     leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
-    
-    # Time axis (scaled to 10 seconds)
     time = np.linspace(0, 10, 1000)
     
     for i in range(12):
         axes[i].plot(time, signal[:, i], color='black', alpha=0.7)
-        # Overlay heatmap using background color
-        # We can use fill_between to show intensity
-        # Use viridis colormap for the intensity
         axes[i].imshow(heatmap_resized[np.newaxis, :], aspect='auto', 
                        extent=[time[0], time[-1], np.min(signal[:, i]), np.max(signal[:, i])],
                        cmap='viridis', alpha=0.3)
@@ -83,24 +65,35 @@ def generate_gradcam_analysis():
     print("Starting Grad-CAM Saliency Analysis...")
     
     # 1. Load Data
-    try:
-        df = load_ptbxl_data(DATA_PATH)
-    except FileNotFoundError:
-        print(f"Error: Could not find data at {DATA_PATH}")
+    X_path = os.path.join(PROCESSED_DATA_PATH, 'X_ptbxl.npy')
+    meta_path = os.path.join(PROCESSED_DATA_PATH, 'ptbxl_database_processed.csv')
+    
+    if not os.path.exists(X_path):
+        print(f"Error: Processed data not found at {X_path}. Run preprocess_ptbxl.py first.")
         return
 
-    test_df = df[df.strat_fold == 10].copy()
-    test_df['primary_class'] = test_df['diagnostic_superclass'].apply(lambda x: x[0] if len(x) > 0 else 'Unknown')
-    test_df = test_df[test_df['primary_class'] != 'Unknown']
+    X_all = np.load(X_path)
+    df = pd.read_csv(meta_path)
+    df['diagnostic_superclass'] = df['diagnostic_superclass'].apply(ast.literal_eval)
+
+    test_idx = df[df.strat_fold == 10].index.values
+    X_test = X_all[test_idx]
+    test_df = df.iloc[test_idx].copy()
     
     # 2. Load Model
     if not os.path.exists(MODEL_PATH):
-        print(f"Error: Model not found. Please train SE-ResNet first.")
-        return
+        model_files = [f for f in os.listdir('results/models/') if f.endswith('.keras')]
+        if model_files:
+            MODEL_PATH_ACTUAL = os.path.join('results/models/', model_files[0])
+            print(f"Primary model not found, using {MODEL_PATH_ACTUAL} instead.")
+        else:
+            print(f"Error: No model found in results/models/. Please train a model first.")
+            return
+    else:
+        MODEL_PATH_ACTUAL = MODEL_PATH
         
-    model = tf.keras.models.load_model(MODEL_PATH)
+    model = tf.keras.models.load_model(MODEL_PATH_ACTUAL)
     
-    # Identify last convolutional layer
     last_conv_layer = None
     for layer in reversed(model.layers):
         if 'conv' in layer.name:
@@ -113,44 +106,39 @@ def generate_gradcam_analysis():
     # 3. Select Representative Cases
     classes = ['NORM', 'MI', 'STTC', 'CD', 'HYP']
     
-    # We need a generator to get processed signals
-    gen = MultiClassECGDataGenerator(test_df, DATA_PATH, batch_size=1, shuffle=False)
+    found_cases = {'NORM_TP': None, 'MI_TP': None, 'HYP_FN': None}
     
-    # Representative cases to find:
-    # 1. NORM TP
-    # 2. MI TP
-    # 3. HYP FN (misclassified as NORM)
-    
-    found_cases = {
-        'NORM_TP': None,
-        'MI_TP': None,
-        'HYP_FN': None
-    }
-    
-    for i in range(len(gen)):
-        X, y = gen[i]
+    print("Searching for suitable test cases...")
+    for i in range(len(X_test)):
+        X = X_test[i:i+1]
         y_prob = model.predict(X, verbose=0)
         y_pred = np.argmax(y_prob, axis=-1)[0]
-        y_true_idx = np.argmax(y, axis=-1)[0]
         
-        true_label = classes[y_true_idx]
+        diagnoses = test_df.iloc[i]['diagnostic_superclass']
+        
+        # Check if diagnoses overlap with classes
+        present_classes = [c for c in classes if c in diagnoses]
+        if not present_classes: continue
+        
+        true_label = present_classes[0] # Take first for simplicity
         pred_label = classes[y_pred]
         
         if found_cases['NORM_TP'] is None and true_label == 'NORM' and pred_label == 'NORM':
-            found_cases['NORM_TP'] = (X[0], y_true_idx, "Normal Case (TP)")
+            found_cases['NORM_TP'] = (X[0], classes.index('NORM'), "Normal Case (TP)")
             
         if found_cases['MI_TP'] is None and true_label == 'MI' and pred_label == 'MI':
-            found_cases['MI_TP'] = (X[0], y_true_idx, "Myocardial Infarction (TP)")
+            found_cases['MI_TP'] = (X[0], classes.index('MI'), "Myocardial Infarction (TP)")
             
         if found_cases['HYP_FN'] is None and true_label == 'HYP' and pred_label == 'NORM':
-            found_cases['HYP_FN'] = (X[0], y_true_idx, "Hypertrophy (FN, misclassified as NORM)")
+            found_cases['HYP_FN'] = (X[0], classes.index('HYP'), "Hypertrophy (FN, misclassified as NORM)")
             
         if all(v is not None for v in found_cases.values()):
             break
 
     # 4. Generate Visualizations
-    for case_id, (signal, class_idx, title) in found_cases.items():
-        if signal is not None:
+    for case_id, val in found_cases.items():
+        if val is not None:
+            signal, class_idx, title = val
             heatmap = gradcam.compute_heatmap(signal[np.newaxis, ...], class_idx)
             save_path = os.path.join(FIGURES_DIR, f'gradcam_{case_id}.png')
             plot_gradcam(signal, heatmap, title, save_path)
