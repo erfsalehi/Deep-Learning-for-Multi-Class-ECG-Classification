@@ -97,20 +97,27 @@ def evaluate_calibration():
         ece = expected_calibration_error(true, prob)
         ece_results[cls_name] = ece
         
-        if cls_name in ['NORM', 'HYP']:
-            idx = 1 if cls_name == 'NORM' else 2
-            plt.subplot(1, 2, idx)
-            
-            prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
-            
-            plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
-            plt.plot(prob_pred, prob_true, marker='s', label=f'{cls_name} (ECE={ece:.4f})')
-            
-            plt.xlabel('Mean Predicted Probability')
-            plt.ylabel('Fraction of Positives')
-            plt.title(f'Reliability Diagram: {cls_name}')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
+    plt.figure(figsize=(15, 10))
+    
+    for i, cls_name in enumerate(classes):
+        prob = y_prob[:, i]
+        true = y_true[:, i]
+        
+        ece = expected_calibration_error(true, prob)
+        ece_results[cls_name] = ece
+        
+        plt.subplot(2, 3, i + 1)
+        
+        prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
+        
+        plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
+        plt.plot(prob_pred, prob_true, marker='s', label=f'{cls_name} (ECE={ece:.4f})')
+        
+        plt.xlabel('Mean Predicted Probability')
+        plt.ylabel('Fraction of Positives')
+        plt.title(f'Reliability Diagram: {cls_name}')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURES_DIR, 'calibration_reliability_diagrams.png'), dpi=300)

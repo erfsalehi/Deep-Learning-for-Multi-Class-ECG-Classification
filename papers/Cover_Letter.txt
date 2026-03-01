@@ -1,0 +1,29 @@
+To the Editor-in-Chief,
+[Journal Name, e.g., IEEE Journal of Biomedical and Health Informatics]
+
+Dear Editor,
+
+Please find enclosed our manuscript entitled: "Automated Multi-Label Classification of 12-Lead ECG Signals using Squeeze-and-Excitation Residual Networks." We are submitting this work for your consideration as an Original Research Article.
+
+Background & Motivation:
+Cardiovascular diseases are a leading cause of global mortality, making rapid, accurate electrocardiogram (ECG) interpretation a clinical necessity. While recent machine learning efforts have focused on binary normal/abnormal anomaly detection, clinical reality demands the simultaneous classification of overlapping, multi-label diagnostic categories. Our work addresses this gap by presenting a comprehensive deep learning framework capable of differentiating between five major cardiac superclasses: Normal (NORM), Myocardial Infarction (MI), ST/T Change (STTC), Conduction Disturbance (CD), and Hypertrophy (HYP).
+
+Key Contributions:
+1. SOTA Multi-Label Architecture: We utilized a Squeeze-and-Excitation Residual Network (SE-ResNet) that adaptively recalibrates channel-wise feature responses, allowing the network to "attend" to the most diagnostically relevant leads.
+2. Handling Class Imbalance: By integrating Focal Loss into the objective function and leveraging Mixup data augmentation, our model successfully detects rare conditions (e.g., HYP) while maintaining high precision on dominant classes (e.g., NORM).
+3. Robust Performance: Our ensemble approach achieved a Macro-Area Under the ROC Curve (AUC) of 0.932 and a Macro-F1 of 0.642 on the standardized PTB-XL Fold 10 test set.
+4. Generalization: We demonstrated strong external validity by maintaining an AUC of 0.844 on the distinct Chapman-Shaoxing dataset without retraining.
+5. Clinical Interpretability: We provide Grad-CAM saliency maps that visualize the model's focus (e.g., ST-segment elevation for MI), bridging the gap between "black-box" AI predictions and clinical trust.
+
+Significance:
+We believe our findings demonstrate that advanced deep learning architectures, combined with targeted data strategies (Mixup and Focal Loss), can yield highly reliable and interpretable multi-label diagnostic tools. This work aligns closely with [Journal Name]'s focus on innovative computational methods to advance healthcare.
+
+We confirm that this manuscript is original, has not been published elsewhere, and is not currently under consideration by another journal. All authors have reviewed the manuscript and agreed to its submission. We have attached the full code repository and reproducible environment script to ensure complete transparency.
+
+Thank you for your time and consideration. We look forward to your response.
+
+Sincerely,
+
+[Your Name]
+[Your Affiliation]
+[Your Email Address]

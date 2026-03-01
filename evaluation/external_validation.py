@@ -35,11 +35,20 @@ def compute_metrics(y_true, y_prob):
         'auc': auc
     }
 
+@tf.keras.utils.register_keras_serializable(package='Custom')
 class FocalLoss(tf.keras.losses.Loss):
-    def __init__(self, gamma=2.0, alpha=None, name='focal_loss'):
-        super().__init__(name=name)
+    def __init__(self, gamma=2.0, alpha=None, name='focal_loss', **kwargs):
+        super().__init__(name=name, **kwargs)
         self.gamma = gamma
         self.alpha = alpha
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'gamma': self.gamma,
+            'alpha': self.alpha
+        })
+        return config
 
     def call(self, y_true, y_pred):
         y_true = tf.cast(y_true, tf.float32)
@@ -72,23 +81,37 @@ def run_external_validation():
     
     classes = ['NORM', 'MI', 'STTC', 'CD', 'HYP']
     
-    # Refined mapping based on SNOMED-CT acronyms in Chapman headers
+    # SNOMED-CT codes for Chapman mapping to PTB-XL Superclasses
     mapping = {
-        # NORM
-        'SB': 'NORM', 'SR': 'NORM', 'ST': 'NORM', 'SA': 'NORM',
-        # MI
-        'MI': 'MI', 'AMI': 'MI', 'IMI': 'MI', 'LMI': 'MI', 'MIBW': 'MI', 
-        'MIFW': 'MI', 'MILW': 'MI', 'MISW': 'MI', 'AQW': 'MI',
-        # STTC
-        'STDD': 'STTC', 'STE': 'STTC', 'STTC': 'STTC', 'STTU': 'STTC', 
-        'TWC': 'STTC', 'TWO': 'STTC', 'AFIB': 'STTC', 'AF': 'STTC', 
-        'SVT': 'STTC', 'AT': 'STTC', 'AVNRT': 'STTC', 'AVRT': 'STTC',
-        # CD
-        'LBBB': 'CD', 'RBBB': 'CD', '1AVB': 'CD', '2AVB': 'CD', '2AVB1': 'CD', 
-        '2AVB2': 'CD', '3AVB': 'CD', 'AVB': 'CD', 'VPB': 'CD', 'APB': 'CD', 
-        'IVB': 'CD', 'IDC': 'CD', 'JEB': 'CD', 'JPT': 'CD',
-        # HYP
-        'LVH': 'HYP', 'RVH': 'HYP', 'RAH': 'HYP'
+        # NORM (Normal / Sinus Rhythms)
+        '426177001': 'NORM', # Sinus Rhythm
+        '426783006': 'NORM', # Sinus Tachycardia
+        '427084000': 'NORM', # Sinus Bradycardia
+        '164884004': 'NORM', # Normal Sinus Rhythm
+        
+        # MI (Myocardial Infarction)
+        '164861001': 'MI',   # Myocardial Infarction
+        '164865005': 'MI',   # Old Myocardial Infarction
+        '164909002': 'MI',   # Inferior Myocardial Infarction
+        '22298006': 'MI',    # Myocardial Infarction (general)
+        
+        # STTC (ST/T Change)
+        '55930002': 'STTC',  # ST Segment Changes
+        '164931005': 'STTC', # ST Segment Change
+        '59118001': 'STTC',  # T-Wave Change
+        '164934002': 'STTC', # T-Wave Inversion
+        '164889003': 'STTC', # Atrial Fibrillation (often grouped here or CD)
+        
+        # CD (Conduction Disturbance)
+        '270492004': 'CD',   # 1st Degree AV Block
+        '164917005': 'CD',   # RBBB
+        '164903001': 'CD',   # LBBB
+        '164947007': 'CD',   # IVCD
+        '164891006': 'CD',   # AV Block
+        
+        # HYP (Hypertrophy)
+        '164873001': 'HYP',  # LVH
+        '164510008': 'HYP',  # RVH
     }
     
     y_true = []
@@ -122,7 +145,11 @@ def run_external_validation():
     X = X[keep_indices]
     y_true = np.array(y_true)
     
-    print(f"Mapped {len(y_true)} samples into 5-class taxonomy.")
+    if len(X) == 0:
+        print("Error: No samples mapped to 5-class taxonomy. Check mapping and dataset labels.")
+        return
+
+    print(f"Mapped {len(y_true)} samples into 5-class taxonomy. X shape: {X.shape}")
     
     # 3. Load PTB-XL Models (Ensemble)
     model_files = [f for f in os.listdir(MODEL_DIR) if f.endswith('.keras')]
@@ -130,7 +157,7 @@ def run_external_validation():
         print(f"Error: No trained models found in {MODEL_DIR}")
         return
         
-    print(f"Loading ensemble of {len(model_files)} models...")
+    print(f"Loading ensemble of {len(model_files)} models: {model_files}")
     models = []
     custom_objects = {'FocalLoss': FocalLoss}
     for mf in model_files:
