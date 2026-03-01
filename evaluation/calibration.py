@@ -38,9 +38,90 @@ def expected_calibration_error(y_true, y_prob, n_bins=10):
             
     return ece
 
-def evaluate_calibration():
-    print("Starting Calibration Analysis...")
+def evaluate_ptbxl_calibration(model, X_test, y_true, classes):
+    print("Starting PTB-XL Calibration Analysis...")
+    y_prob = model.predict(X_test, batch_size=32)
     
+    ece_results = {}
+    plt.figure(figsize=(15, 10))
+    for i, cls_name in enumerate(classes):
+        prob = y_prob[:, i]
+        true = y_true[:, i]
+        ece = expected_calibration_error(true, prob)
+        ece_results[cls_name] = ece
+        
+        plt.subplot(2, 3, i + 1)
+        prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
+        plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
+        plt.plot(prob_pred, prob_true, marker='s', label=f'{cls_name} (ECE={ece:.4f})')
+        plt.xlabel('Mean Predicted Probability')
+        plt.ylabel('Fraction of Positives')
+        plt.title(f'PTB-XL Reliability: {cls_name}')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, 'calibration_ptbxl.png'), dpi=300)
+    plt.savefig(os.path.join(FIGURES_DIR, 'calibration_ptbxl.pdf'))
+    return ece_results
+
+def evaluate_chapman_calibration(model, classes):
+    print("Starting Chapman Calibration Analysis...")
+    X_path = 'data/processed/chapman/X_chapman.npy'
+    meta_path = 'data/processed/chapman/chapman_database.csv'
+    
+    if not os.path.exists(X_path):
+        print("Chapman data not found.")
+        return None
+
+    X = np.load(X_path)
+    df = pd.read_csv(meta_path)
+    
+    mapping = {
+        '426177001': 'NORM', '426783006': 'NORM', '427084000': 'NORM', '164884004': 'NORM',
+        '164861001': 'MI', '164865005': 'MI', '164909002': 'MI', '22298006': 'MI',
+        '55930002': 'STTC', '164931005': 'STTC', '164930006': 'STTC', '164873001': 'STTC',
+        '39732003': 'STTC', '427172004': 'STTC', '164917005': 'STTC', '426761007': 'STTC',
+        '713427006': 'CD', '713426002': 'CD', '445118002': 'CD', '445211001': 'CD',
+        '164903001': 'CD', '164951009': 'CD', '425868008': 'CD', '426112009': 'CD',
+        '426660007': 'CD', '63593006': 'CD', '6374002': 'CD',
+        '164890007': 'HYP', '164871004': 'HYP', '164872006': 'HYP', '89792004': 'HYP',
+        '164934002': 'HYP', '429622005': 'HYP', '428750005': 'HYP'
+    }
+    
+    y_true = np.zeros((len(df), len(classes)))
+    df['labels'] = df['labels'].apply(ast.literal_eval)
+    for i, labels in enumerate(df['labels']):
+        mapped = [mapping.get(str(l)) for l in labels]
+        for c_idx, cls_name in enumerate(classes):
+            if cls_name in mapped:
+                y_true[i, c_idx] = 1
+
+    y_prob = model.predict(X, batch_size=32)
+    
+    ece_results = {}
+    plt.figure(figsize=(15, 10))
+    for i, cls_name in enumerate(classes):
+        prob = y_prob[:, i]
+        true = y_true[:, i]
+        ece = expected_calibration_error(true, prob)
+        ece_results[cls_name] = ece
+        
+        plt.subplot(2, 3, i + 1)
+        prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
+        plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
+        plt.plot(prob_pred, prob_true, marker='s', label=f'{cls_name} (ECE={ece:.4f})')
+        plt.xlabel('Mean Predicted Probability')
+        plt.ylabel('Fraction of Positives')
+        plt.title(f'Chapman Reliability: {cls_name}')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, 'calibration_chapman.png'), dpi=300)
+    return ece_results
+
+def evaluate_calibration():
     # 1. Load Data
     X_path = os.path.join(PROCESSED_DATA_PATH, 'X_ptbxl.npy')
     meta_path = os.path.join(PROCESSED_DATA_PATH, 'ptbxl_database_processed.csv')
@@ -82,54 +163,17 @@ def evaluate_calibration():
     
     model = tf.keras.models.load_model(MODEL_PATH_ACTUAL)
     
-    # 3. Predict
-    y_prob = model.predict(X_test, batch_size=32)
-    
-    # 4. Compute ECE and Plot Reliability Diagrams
-    ece_results = {}
-    
-    plt.figure(figsize=(15, 5))
-    
-    for i, cls_name in enumerate(classes):
-        prob = y_prob[:, i]
-        true = y_true[:, i]
-        
-        ece = expected_calibration_error(true, prob)
-        ece_results[cls_name] = ece
-        
-    plt.figure(figsize=(15, 10))
-    
-    for i, cls_name in enumerate(classes):
-        prob = y_prob[:, i]
-        true = y_true[:, i]
-        
-        ece = expected_calibration_error(true, prob)
-        ece_results[cls_name] = ece
-        
-        plt.subplot(2, 3, i + 1)
-        
-        prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
-        
-        plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
-        plt.plot(prob_pred, prob_true, marker='s', label=f'{cls_name} (ECE={ece:.4f})')
-        
-        plt.xlabel('Mean Predicted Probability')
-        plt.ylabel('Fraction of Positives')
-        plt.title(f'Reliability Diagram: {cls_name}')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, 'calibration_reliability_diagrams.png'), dpi=300)
-    plt.savefig(os.path.join(FIGURES_DIR, 'calibration_reliability_diagrams.pdf'))
+    ece_ptbxl = evaluate_ptbxl_calibration(model, X_test, y_true, classes)
+    ece_chapman = evaluate_chapman_calibration(model, classes)
     
     # Save text results
     with open(os.path.join(RESULTS_DIR, 'calibration_ece.txt'), 'w') as f:
-        f.write("Expected Calibration Error (ECE) per class:\n")
-        for cls_name, ece in ece_results.items():
-            f.write(f"{cls_name}: {ece:.4f}\n")
-            
-    print("Calibration analysis complete. Figures and results saved.")
+        f.write("Expected Calibration Error (ECE):\n\nPTB-XL:\n")
+        for k, v in ece_ptbxl.items(): f.write(f"{k}: {v:.4f}\n")
+        if ece_chapman:
+            f.write("\nChapman:\n")
+            for k, v in ece_chapman.items(): f.write(f"{k}: {v:.4f}\n")
+    print("Calibration analysis complete.")
 
 if __name__ == "__main__":
     evaluate_calibration()

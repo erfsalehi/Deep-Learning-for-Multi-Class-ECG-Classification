@@ -1,6 +1,15 @@
-Expected Calibration Error (ECE) per class:
+Expected Calibration Error (ECE):
+
+PTB-XL:
 NORM: 0.1062
 MI: 0.0806
 STTC: 0.0288
 CD: 0.0263
 HYP: 0.0389
+
+Chapman:
+NORM: 0.2155
+MI: 0.1136
+STTC: 0.1811
+CD: 0.1529
+HYP: 0.1865
