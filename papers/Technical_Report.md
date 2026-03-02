@@ -111,7 +111,7 @@ Grad-CAM analysis (Figure 6) shows the model focusing on the QRS complex and ST-
 On the Chapman-Shaoxing dataset, the ensemble maintained an **AUROC of 0.799 (95% CI: 0.792 - 0.806)**, demonstrating solid discriminative power despite differences in population demographics and recording environments.
 
 #### 4.6.1 Dataset Mismatch Analysis
-The performance drop in Macro-F1 (0.269) on Chapman-Shaoxing compared to PTB-XL (0.729) is primarily driven by significant differences in class prevalence and labeling protocols:
+The performance drop in Macro-F1 (0.315) on Chapman-Shaoxing compared to PTB-XL (0.715) is primarily driven by significant differences in class prevalence and labeling protocols:
 *   **Hypertrophy (HYP)**: Prevalence is ~32% in Chapman-Shaoxing compared to ~12% in PTB-XL. However, our SNOMED-CT mapping discovered a label density mismatch, where many Chapman samples may have subtle hypertrophy not captured by the mapping or the PTB-XL-trained model.
 *   **Normal (NORM)**: High prevalence (~71% in Chapman vs 44% in PTB-XL) leads to a high weighted-F1 but penalizes the macro-average due to minority class underperformance.
 *   **Demographics**: Mean age in PTB-XL is ~63 years, while Chapman is ~58 years. The older PTB-XL cohort likely exhibits more complex, multi-label abnormalities than the younger Chapman cohort.
@@ -164,7 +164,7 @@ The lower F1 score in the **<50 age group** (0.627 vs ~0.70 for other age groups
 As shown in **Figure 7**, there is a strong correlation ($R^2 > 0.8$) between class prevalence and F1-score. While NORM reaches >0.90 F1, the HYP class remains challenging. However, our implementation of **Focal Loss** and **Threshold Optimization** successfully pushed the HYP F1 score above 0.500, a common academic benchmark for acceptable minority class performance in multi-label ECG classification.
 
 ### 5.2 Clinical Significance
-The observed results suggest the model is a **viable screening tool for NORM and STTC detection** in populations similar to PTB-XL. However, the complete failure to generalize MI, CD, and HYP classifications to the Chapman-Shaoxing cohort indicates that the system is not yet ready for broad, autonomous clinical deployment. The ability to produce visual saliency maps (Grad-CAM) nonetheless remains a valuable feature for clinical review of "Normal" signals.
+The observed results suggest the model is a **viable screening tool for NORM and STTC detection** in populations similar to PTB-XL. However, while some discriminative power is retained, we observe significant performance degradation for MI, CD, and HYP classifications on the Chapman-Shaoxing cohort, indicating that the system is not yet ready for broad, autonomous clinical deployment. The ability to produce visual saliency maps (Grad-CAM) nonetheless remains a valuable feature for clinical review of "Normal" signals.
 
 ### 5.3 Mechanisms of Generalization Failure
 The observed degradation in minority class F1 scores on the external cohort reveals **threshold miscalibration as the primary barrier to generalization**, with feature drift serving as a secondary factor. While the AUROC remains stable (0.799), the probability distributions for the external cohort are systematically shifted relative to the internal training set. This suggests that while the SE-ResNet backbone extracts diagnostically relevant features, the decision boundaries (thresholds) optimized for the PTB-XL prevalence and noise profile are poorly calibrated for the Chapman environment. Specifically, the extreme prevalence mismatch (e.g., MI prevalence of 0.8% in Chapman vs 25% in PTB-XL) necessitates dynamic threshold adaptation rather than static transfer, as subtle feature drift in lead-specific responses is amplified by these calibrated mismatches.
@@ -174,7 +174,7 @@ Our study, while rigorous, is subject to several limitations:
 1.  **Single-Center Training**: The primary models were trained exclusively on the PTB-XL dataset, which may contain institution-specific recording biases that limit universal applicability.
 2.  **No Prospective Validation**: All evaluations were retrospective; true clinical utility requires prospective testing in an active diagnostic environment.
 3.  **SNOMED-CT Mapping Uncertainty**: While SNOMED codes provide a standard, differences in clinician labeling protocols across datasets (Chapman vs. PTB-XL) may introduce label density mismatches that inflate or deflate measured performance.
-4.  **Static Threshold Transfer**: We demonstrate that thresholds optimized for one population (PTB-XL) fail completey in another (Chapman), highlighting the need for dynamic threshold adaptation.
+4.  **Static Threshold Transfer**: We demonstrate that thresholds optimized for one population (PTB-XL) fail completely in another (Chapman), highlighting the need for dynamic threshold adaptation.
 5.  **Recording Quality**: Significant differences in signal-to-noise ratios and electrode placement accuracy between the two cohorts likely contributed to the "feature drift" observed in minority class classifications.
 
 ---
