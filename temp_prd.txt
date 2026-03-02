@@ -1,0 +1,115 @@
+PRODUCT REQUIREMENTS DOCUMENT
+Research Improvement Plan
+Automated Multi-Label ECG Classification using SE-ResNet
+
+
+
+1.1  Current State
+The existing SE-ResNet ensemble achieves a Macro-AUC of 0.932 and Macro-F1 of 0.642 on PTB-XL Fold 10, with external validation AUROC of 0.844 on Chapman-Shaoxing. While technically competent, the paper in its current form would not clear peer review at a Q1 venue due to missing comparisons, weak statistical rigour, and underdeveloped analysis of failure cases.
+1.2  Goal
+Produce a publication-ready manuscript that meets the methodological standards of journals such as NPJ Digital Medicine, IEEE Transactions on Biomedical Engineering, or Journal of Biomedical Informatics, with a realistic submission target within 3–4 months.
+1.3  Non-Goals
+Deployment or clinical integration — this PRD covers research and manuscript only.
+Real-time inference optimisation.
+Collection of new proprietary ECG data.
+
+
+The following table defines current performance, publication-ready targets, and the priority of each metric.
+
+
+P1 = Must-have for submission  |  P2 = Strongly recommended  |  P3 = Nice-to-have
+
+
+3.1  Priority 1 — Must-Have
+REQ-01: SOTA Baseline Comparisons
+Implement or reproduce results from at least three established methods on the identical PTB-XL Fold 10 test split, reported under the same evaluation protocol.
+Ribeiro et al. (2020) — Nature Communications CNN (12-lead, 6-class). Reference implementation available on GitHub.
+PhysioNet/CinC 2020 winner — Top-ranked multi-label model. Use the team's public repository.
+Transformer baseline — At minimum one attention-based model (e.g. ST-MEM, CLOCS, or W2V-BERT-ECG).
+Acceptance criteria: all three baselines evaluated on Fold 10 with Macro-AUC, Macro-F1, and per-class F1 reported in a unified comparison table.
+
+REQ-02: Statistical Validation
+All reported metrics must be accompanied by 95% confidence intervals. Model comparisons must include formal significance testing.
+Bootstrap CIs (n=1000 resamples) on AUC, F1, and per-class F1 for the ensemble and all baselines.
+DeLong's test for AUC comparisons between the ensemble and each baseline.
+McNemar's test for pairwise F1 comparisons at optimal thresholds.
+Acceptance criteria: every number in the results tables has a CI; p-values reported for all pairwise comparisons against baselines.
+
+REQ-03: Minority Class Improvement (HYP)
+F1-HYP of 0.418 is insufficient for publication. At least two additional strategies must be evaluated and reported.
+Threshold optimisation: sweep decision threshold per class on validation set using F1-maximisation or Youden's J.
+Class-weighted oversampling: SMOTE or random oversampling of HYP samples with appropriate stratification.
+Two-stage training: fine-tune final layers on a class-balanced subset after standard training.
+Acceptance criteria: at least one strategy yields F1-HYP >= 0.500. All attempted strategies reported in an ablation table regardless of outcome.
+
+REQ-04: Expanded External Validation Analysis
+The 9-point AUC drop on Chapman-Shaoxing must be investigated and reported as a dedicated subsection, not a single sentence.
+Per-class AUC and F1 on Chapman-Shaoxing, not just aggregate AUROC.
+Analysis of which classes degrade most and a hypothesis for why (demographic mismatch, label scheme differences, recording protocol).
+Test whether simple input re-normalisation (using Chapman statistics) recovers performance.
+Comparison of PTB-XL vs Chapman-Shaoxing dataset characteristics in a summary table (age, sex distribution, class prevalence).
+Acceptance criteria: a standalone subsection (min 300 words) with per-class breakdown and at least one domain-adaptation experiment.
+
+3.2  Priority 2 — Strongly Recommended
+REQ-05: Full Component Ablation Table
+The current augmentation ablation (Figure 4) is partial. A complete table must show the independent contribution of each architectural and training choice.
+Row 1: Plain ResNet (no SE-blocks, BCE loss, no augmentation) — true baseline.
+Row 2: + SE-blocks.
+Row 3: + Focal Loss (no augmentation).
+Row 4: + Mixup augmentation.
+Row 5: + Ensemble (final model).
+Acceptance criteria: table with Macro-AUC and Macro-F1 for all five configurations, with CIs.
+
+REQ-06: Per-Class Calibration Analysis
+ECE is currently reported as a single aggregate number. Reviewers in medical AI expect per-class reliability.
+Reliability diagram for each of the five superclasses separately.
+ECE reported per class, not just globally.
+Discussion of which classes are over- vs under-confident and clinical implications.
+
+REQ-07: Subgroup Analysis
+PTB-XL metadata enables analysis of model equity across patient subgroups. At minimum two variables must be reported.
+Age groups: <40, 40–60, 60–80, >80 years — AUC and F1 per group.
+Sex: Male vs female — AUC and F1 per group, with statistical comparison.
+Acceptance criteria: subgroup results in a supplementary table with discussion of any significant disparities.
+
+REQ-08: Uncertainty Quantification
+Add a lightweight uncertainty estimate to flag low-confidence predictions, which is a key clinical requirement.
+Monte Carlo Dropout: enable dropout at inference, run 50 forward passes, report mean and std of predicted probabilities.
+Analyse whether high-uncertainty samples correspond to misclassified or ambiguous cases.
+Report the proportion of test samples with uncertainty above a threshold and their accuracy vs the confident subset.
+
+3.3  Priority 3 — Nice-to-Have
+REQ-09: Human Cardiologist Benchmark
+The gold standard for clinical AI papers is comparison to human expert performance. Even citing existing literature benchmarks is better than no comparison.
+Identify published cardiologist performance on PTB-XL or similar datasets.
+If resources permit: brief annotation study with 2–3 clinical collaborators on a 200-sample subset of Fold 10.
+
+REQ-10: Transformer Comparison or Integration
+Transformer-based models are the current frontier in ECG AI. Including one as either a baseline or a proposed model significantly raises the paper's appeal.
+Minimum: reproduce one Transformer baseline for REQ-01 and include it in comparison tables.
+Stretch goal: hybrid SE-ResNet + Transformer attention head on the final representation layer.
+
+REQ-11: Related Work Section
+The paper currently has no literature review. A proper related work section of 600–800 words covering four eras of ECG AI is required for any journal submission.
+Traditional ML and handcrafted features (pre-2018).
+CNN-based approaches for ECG (2018–2021).
+Attention and Transformer models (2021–present).
+Multi-label vs single-label formulation in ECG literature.
+
+
+
+
+
+
+
+
+
+
+Appendix: Key References for Baseline Implementation
+Ribeiro et al. (2020) — 'Automatic diagnosis of the 12-lead ECG using a deep neural network.' Nature Communications. https://github.com/antonior92/automatic-ecg-diagnosis
+Strodthoff et al. (2021) — 'Deep Learning for ECG Analysis: Benchmarks and Insights from PTB-XL.' IEEE Journal of Biomedical and Health Informatics. Defines the PTB-XL benchmark protocol.
+PhysioNet/CinC Challenge 2020 — 'Classification of 12-lead ECGs: The PhysioNet/Computing in Cardiology Challenge 2020.' https://physionetchallenges.org/2020/
+Mehari & Strodthoff (2022) — 'Self-supervised representation learning from 12-lead ECG data.' Computers in Biology and Medicine. (CLOCS / contrastive baseline)
+Na et al. (2022) — 'ST-MEM: Masked Autoencoders for ECG Pre-training.' arXiv. (Transformer baseline)
+
+GitHub: https://github.com/erfsalehi/Deep-Learning-for-Multi-Class-ECG-Classification

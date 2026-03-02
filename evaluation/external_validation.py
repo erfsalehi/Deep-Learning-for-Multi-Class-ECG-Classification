@@ -84,34 +84,25 @@ def run_external_validation():
     # SNOMED-CT codes for Chapman mapping to PTB-XL Superclasses
     mapping = {
         # NORM (Normal / Sinus Rhythms)
-        '426177001': 'NORM', # Sinus Rhythm
-        '426783006': 'NORM', # Sinus Tachycardia
-        '427084000': 'NORM', # Sinus Bradycardia
-        '164884004': 'NORM', # Normal Sinus Rhythm
+        '426177001': 'NORM', '426783006': 'NORM', '427084000': 'NORM', '164884004': 'NORM',
         
         # MI (Myocardial Infarction)
-        '164861001': 'MI',   # Myocardial Infarction
-        '164865005': 'MI',   # Old Myocardial Infarction
-        '164909002': 'MI',   # Inferior Myocardial Infarction
-        '22298006': 'MI',    # Myocardial Infarction (general)
+        '164861001': 'MI',   '164865005': 'MI',   '164909002': 'MI',   '22298006': 'MI',
         
         # STTC (ST/T Change)
-        '55930002': 'STTC',  # ST Segment Changes
-        '164931005': 'STTC', # ST Segment Change
-        '59118001': 'STTC',  # T-Wave Change
-        '164934002': 'STTC', # T-Wave Inversion
-        '164889003': 'STTC', # Atrial Fibrillation (often grouped here or CD)
+        '55930002': 'STTC',  '164931005': 'STTC', '164930006': 'STTC', '59118001': 'STTC',
+        '39732003': 'STTC',  '427172004': 'STTC', '164917005': 'STTC', '426761007': 'STTC',
+        '164889003': 'STTC', 
         
         # CD (Conduction Disturbance)
-        '270492004': 'CD',   # 1st Degree AV Block
-        '164917005': 'CD',   # RBBB
-        '164903001': 'CD',   # LBBB
-        '164947007': 'CD',   # IVCD
-        '164891006': 'CD',   # AV Block
+        '713427006': 'CD', '713426002': 'CD', '445118002': 'CD', '445211001': 'CD',
+        '164903001': 'CD', '164951009': 'CD', '425868008': 'CD', '426112009': 'CD',
+        '426660007': 'CD', '63593006': 'CD', '6374002': 'CD', '270492004': 'CD',
         
         # HYP (Hypertrophy)
-        '164873001': 'HYP',  # LVH
-        '164510008': 'HYP',  # RVH
+        '164890007': 'HYP', '164871004': 'HYP', '164872006': 'HYP', '89792004': 'HYP',
+        '164934002': 'HYP', '429622005': 'HYP', '428750005': 'HYP', '164873001': 'HYP',
+        '164510008': 'HYP'
     }
     
     y_true = []

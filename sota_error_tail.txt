@@ -1,0 +1,112 @@
+442, in _load
+_model_from_fileobj
+    model = 
+_model_from_config(
+        config_json, 
+custom_objects, 
+compile, safe_mode
+    )
+  File "C:\Users\erfsa
+\AppData\Local\Program
+s\Python\Python313\Lib
+\site-packages\keras\s
+rc\saving\saving_lib.p
+y", line 431, in 
+_model_from_config
+    model = deserializ
+e_keras_object(
+        config_dict, 
+custom_objects, 
+safe_mode=safe_mode
+    )
+  File "C:\Users\erfsa
+\AppData\Local\Program
+s\Python\Python313\Lib
+\site-packages\keras\s
+rc\saving\serializatio
+n_lib.py", line 735, 
+in deserialize_keras_o
+bject
+    raise TypeError(
+    ...<6 lines>...
+    )
+TypeError: <class 'ker
+as.src.models.function
+al.Functional'> could 
+not be deserialized 
+properly. Please 
+ensure that 
+components that are 
+Python object 
+instances (layers, 
+models, etc.) 
+returned by 
+`get_config()` are 
+explicitly 
+deserialized in the 
+model's 
+`from_config()` 
+method.
+
+config={'module': 'ker
+as.src.models.function
+al', 'class_name': 
+'Functional', 
+'config': {}, 
+'registered_name': 
+'Functional', 
+'build_config': 
+{'input_shape': 
+None}, 
+'compile_config': 
+None}.
+
+Exception 
+encountered: Could 
+not locate class 
+'PatchEmbedding'. 
+Make sure custom 
+classes and functions 
+are decorated with `@k
+eras.saving.register_k
+eras_serializable()`. 
+If they are already 
+decorated, make sure 
+they are all imported 
+so that the decorator 
+is run before trying 
+to load them. Full 
+object config: 
+{'module': 'src.models
+.transformer_ecg', 
+'class_name': 
+'PatchEmbedding', 
+'config': 
+{'patch_size': 50, 
+'embed_dim': 128, 
+'trainable': True, 
+'dtype': {'module': 
+'keras', 
+'class_name': 
+'DTypePolicy', 
+'config': {'name': 
+'float32'}, 
+'registered_name': 
+None}}, 
+'registered_name': 
+'PatchEmbedding', 
+'build_config': 
+{'input_shape': 
+[None, 1000, 12]}, 
+'name': 
+'patch_embedding', 
+'inbound_nodes': 
+[{'args': 
+[{'class_name': 
+'__keras_tensor__', 
+'config': {'shape': 
+[None, 1000, 12], 
+'dtype': 'float32', 
+'keras_history': 
+['input_layer', 0, 
+0]}}], 'kwargs': {}}]}

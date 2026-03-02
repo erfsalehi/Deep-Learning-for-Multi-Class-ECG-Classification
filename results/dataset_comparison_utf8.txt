@@ -1,0 +1,14 @@
+﻿Analyzing PTB-XL...
+
+Analyzing Chapman...
+
+Dataset Comparison Table:
+                       PTB-XL  Chapman-Shaoxing
+count            21799.000000      45150.000000
+age_mean            62.769301         58.208937
+sex_m_pct           52.084958         56.372093
+prevalence_NORM     43.644204         70.724252
+prevalence_MI       25.088307          0.795127
+prevalence_STTC     24.014863         18.954596
+prevalence_CD       22.468921          4.361019
+prevalence_HYP      12.151934         32.157254

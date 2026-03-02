@@ -38,6 +38,19 @@ def expected_calibration_error(y_true, y_prob, n_bins=10):
             
     return ece
 
+def compute_ece_ci(y_true, y_prob, n_bins=10, n_bootstraps=1000, alpha=0.95):
+    bootstrapped_ece = []
+    indices = np.arange(len(y_true))
+    for _ in range(n_bootstraps):
+        resampled_indices = np.random.choice(indices, size=len(indices), replace=True)
+        ece = expected_calibration_error(y_true[resampled_indices], y_prob[resampled_indices], n_bins=n_bins)
+        bootstrapped_ece.append(ece)
+    
+    mean_ece = np.mean(bootstrapped_ece)
+    lower = np.percentile(bootstrapped_ece, (1-alpha)/2 * 100)
+    upper = np.percentile(bootstrapped_ece, (1+alpha)/2 * 100)
+    return mean_ece, lower, upper
+
 def evaluate_ptbxl_calibration(model, X_test, y_true, classes):
     print("Starting PTB-XL Calibration Analysis...")
     y_prob = model.predict(X_test, batch_size=32)
@@ -47,8 +60,8 @@ def evaluate_ptbxl_calibration(model, X_test, y_true, classes):
     for i, cls_name in enumerate(classes):
         prob = y_prob[:, i]
         true = y_true[:, i]
-        ece = expected_calibration_error(true, prob)
-        ece_results[cls_name] = ece
+        ece, lower, upper = compute_ece_ci(true, prob)
+        ece_results[cls_name] = f"{ece:.4f} ({lower:.4f}-{upper:.4f})"
         
         plt.subplot(2, 3, i + 1)
         prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
@@ -104,8 +117,8 @@ def evaluate_chapman_calibration(model, classes):
     for i, cls_name in enumerate(classes):
         prob = y_prob[:, i]
         true = y_true[:, i]
-        ece = expected_calibration_error(true, prob)
-        ece_results[cls_name] = ece
+        ece, lower, upper = compute_ece_ci(true, prob)
+        ece_results[cls_name] = f"{ece:.4f} ({lower:.4f}-{upper:.4f})"
         
         plt.subplot(2, 3, i + 1)
         prob_true, prob_pred = calibration_curve(true, prob, n_bins=10)
@@ -169,10 +182,10 @@ def evaluate_calibration():
     # Save text results
     with open(os.path.join(RESULTS_DIR, 'calibration_ece.txt'), 'w') as f:
         f.write("Expected Calibration Error (ECE):\n\nPTB-XL:\n")
-        for k, v in ece_ptbxl.items(): f.write(f"{k}: {v:.4f}\n")
+        for k, v in ece_ptbxl.items(): f.write(f"{k}: {v}\n")
         if ece_chapman:
             f.write("\nChapman:\n")
-            for k, v in ece_chapman.items(): f.write(f"{k}: {v:.4f}\n")
+            for k, v in ece_chapman.items(): f.write(f"{k}: {v}\n")
     print("Calibration analysis complete.")
 
 if __name__ == "__main__":
