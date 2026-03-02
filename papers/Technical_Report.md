@@ -7,7 +7,7 @@
 
 ## Abstract
 
-By leveraging **Squeeze-and-Excitation Residual Networks (SE-ResNet)** combined with **Focal Loss**, **Mixup Augmentation**, and **Threshold Optimization**, our ensemble model achieved a **Macro-AUC of 0.918 (95% CI: 0.910-0.924)** and a **Macro-F1 of 0.715 (95% CI: 0.705-0.725)** on the PTB-XL dataset. However, while NORM and STTC detection showed strong external generalization to the Chapman-Shaoxing dataset (AUROC 0.799), significant miscalibration and performance degradation were observed for minority classes (MI, CD, HYP) under domain shift, highlighting critical challenges in the cross-dataset transfer of ECG diagnostic models.
+By leveraging **Squeeze-and-Excitation Residual Networks (SE-ResNet)** combined with **Focal Loss**, **Mixup Augmentation**, and **Threshold Optimization**, our ensemble model achieved a **Macro-AUC of 0.918 (95% CI: 0.910-0.924)** and a **Macro-F1 of 0.715 (95% CI: 0.705-0.725)** on the PTB-XL dataset. External validation on the Chapman-Shaoxing dataset (AUROC 0.799) demonstrated significant performance degradation for minority classes (MI, CD, HYP), though partial retention of discriminative capability was observed. These findings highlight threshold miscalibration as a primary barrier to cross-dataset transfer, underscoring the need for domain-adaptive decision boundaries in clinical ECG AI.
 
 ---
 
@@ -125,9 +125,9 @@ The performance drop in Macro-F1 (0.269) on Chapman-Shaoxing compared to PTB-XL 
 | **HYP** | 12.2% | 32.2% | 0.28 |
 
 #### 4.6.2 Error Analysis and Robustness
-The external validation results yield a critical finding: **the model generalizes well for high-prevalence classes (NORM, STTC) but shows significant performance degradation for minority categories.** While discriminative power remains reasonable (AUROC 0.799), the F1 scores for MI (0.07) and HYP (0.28) indicate that fixed thresholds fail to capture the same signal characteristics under domain shift.
+External validation results yield a nuanced finding: while discriminative power remains reasonable (AUROC 0.799), we observe **significant but class-variable degradation** under domain shift. The model retains strong performance for the NORM class (F1: 0.78) but experiences substantial drops for MI (F1: 0.07) and HYP (F1: 0.28) when utilizing standard 0.5 thresholds. Notably, the CD class maintains a Macro-F1 of 0.41, indicating that the SE-ResNet features capture robust representations of conduction disturbances that partially survive the recording environment transition.
 
-This failure is likely due to the model's sensitivity to lead-specific recording characteristics of PTB-XL that do not transfer to the Chapman environment, combined with the extreme prevalence differences (e.g., MI at 0.8% in Chapman vs 25% in PTB-XL). 
+This degradation is likely due to the model's sensitivity to lead-specific recording characteristics of PTB-XL that do not transfer perfectly to the Chapman environment, combined with the extreme prevalence differences (e.g., MI at 0.8% in Chapman vs 25% in PTB-XL) which render fixed thresholds sub-optimal.
 
 ### 4.7 Full Component Ablation (REQ-05)
 The impact of each project component was evaluated sequentially on the PTB-XL Fold 10 test set.
@@ -167,7 +167,7 @@ As shown in **Figure 7**, there is a strong correlation ($R^2 > 0.8$) between cl
 The observed results suggest the model is a **viable screening tool for NORM and STTC detection** in populations similar to PTB-XL. However, the complete failure to generalize MI, CD, and HYP classifications to the Chapman-Shaoxing cohort indicates that the system is not yet ready for broad, autonomous clinical deployment. The ability to produce visual saliency maps (Grad-CAM) nonetheless remains a valuable feature for clinical review of "Normal" signals.
 
 ### 5.3 Mechanisms of Generalization Failure
-The dramatic drop in performance for Myocardial Infarction (F1: 0.03) and Hypertrophy (F1: 0.00) under domain shift reveals a **failure of the decision boundaries** rather than a failure of feature extraction. While the AUROC remains high, the probability distributions produced by the model for the external cohort are systematically shifted. This suggests that the leads-wise features captured by the SE-blocks may be over-fitted to the specific amplitude and noise profiles of the PTB-XL recordings. Furthermore, the extreme prevalence difference (e.g., MI at 0.8% in Chapman vs 25% in PTB-XL) means the optimized thresholds for PTB-XL are fundamentally inapplicable to the external cohort, leading to near-zero F1 scores.
+The observed degradation in minority class F1 scores on the external cohort reveals **threshold miscalibration as the primary barrier to generalization**, with feature drift serving as a secondary factor. While the AUROC remains stable (0.799), the probability distributions for the external cohort are systematically shifted relative to the internal training set. This suggests that while the SE-ResNet backbone extracts diagnostically relevant features, the decision boundaries (thresholds) optimized for the PTB-XL prevalence and noise profile are poorly calibrated for the Chapman environment. Specifically, the extreme prevalence mismatch (e.g., MI prevalence of 0.8% in Chapman vs 25% in PTB-XL) necessitates dynamic threshold adaptation rather than static transfer, as subtle feature drift in lead-specific responses is amplified by these calibrated mismatches.
 
 ### 5.4 Limitations
 Our study, while rigorous, is subject to several limitations:
@@ -180,4 +180,4 @@ Our study, while rigorous, is subject to several limitations:
 ---
 
 ## 6. Conclusion
-We implemented a multi-label ECG classification system utilizing SE-ResNets and advanced data-handling techniques. While achieving high performance and surpassing literature baselines on the internal PTB-XL dataset, external validation reveals significant limitations in cross-dataset generalization. The system demonstrates robust detection of Normal signals and ST/T Changes across domains, but fails to generalize Myocardial Infarction, Conduction Disturbance, and Hypertrophy classifications. Furthermore, class-specific calibration analysis highlights significant local miscalibration (ECE > 0.10) for high-impact classes. These findings underscore the necessity of domain adaptation and class-level calibration for clinical deployment of ECG AI.
+We implemented a multi-label ECG classification system utilizing SE-ResNets and advanced data-handling techniques. While achieving high performance and surpassing literature baselines on the internal PTB-XL dataset, external validation reveals that performance shows significant but class-variable degradation under domain shift. The system demonstrates robust detection of Normal signals and ST/T Changes across domains, while retaining partial discriminative capability for Conduction Disturbances and Hypertrophy. Furthermore, class-specific calibration analysis highlights significant local miscalibration (ECE > 0.10) for high-impact classes. These findings underscore the necessity of domain adaptation and class-level calibration for clinical deployment of ECG AI.
