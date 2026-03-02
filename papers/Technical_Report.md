@@ -7,7 +7,7 @@
 
 ## Abstract
 
-By leveraging **Squeeze-and-Excitation Residual Networks (SE-ResNet)** combined with **Focal Loss**, **Mixup Augmentation**, and **Threshold Optimization**, our ensemble model achieved a **Macro-AUC of 0.918 (95% CI: 0.910-0.924)** and a **Macro-F1 of 0.729 (95% CI: 0.718-0.739)** on the PTB-XL dataset. However, while NORM and STTC detection showed strong external generalization to the Chapman-Shaoxing dataset (AUROC 0.844), significant miscalibration and performance degradation were observed for minority classes (MI, CD, HYP) under domain shift, highlighting critical challenges in the cross-dataset transfer of ECG diagnostic models.
+By leveraging **Squeeze-and-Excitation Residual Networks (SE-ResNet)** combined with **Focal Loss**, **Mixup Augmentation**, and **Threshold Optimization**, our ensemble model achieved a **Macro-AUC of 0.918 (95% CI: 0.910-0.924)** and a **Macro-F1 of 0.715 (95% CI: 0.705-0.725)** on the PTB-XL dataset. However, while NORM and STTC detection showed strong external generalization to the Chapman-Shaoxing dataset (AUROC 0.799), significant miscalibration and performance degradation were observed for minority classes (MI, CD, HYP) under domain shift, highlighting critical challenges in the cross-dataset transfer of ECG diagnostic models.
 
 ---
 
@@ -73,7 +73,7 @@ The ensemble of SE-ResNet (Standard) and SE-ResNet (Focal Loss) with optimized t
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Baseline SE-ResNet** | 0.5 | 0.907 | 0.678 | 0.845 | 0.630 | 0.744 | 0.727 | 0.444 |
 | **Ensemble (SOTA)** | 0.5 | **0.918** | **0.690** | **0.848** | **0.649** | **0.752** | **0.737** | **0.463** |
-| **Ensemble (SOTA)** | Opt. | **0.918** | **0.729** | **0.848** | **0.706** | **0.752** | **0.796** | **0.533** |
+| **Ensemble (SOTA)** | Opt. | **0.918** | **0.715** | **0.843** | **0.705** | **0.770** | **0.752** | **0.508** |
 
 *(Note: The ensemble results in the "Opt." row utilize optimized decision thresholds. AUC/F1 in the Section 3.2 comparison use a fixed 0.5 threshold for parity with baseline literature. Note that thresholding significantly boosts F1 scores for minority classes like HYP but does not alter the model's discriminative power as measured by AUC.)*
 
@@ -108,7 +108,7 @@ Grad-CAM analysis (Figure 6) shows the model focusing on the QRS complex and ST-
 ![Figure 6: Grad-CAM Composite](/results/figures/publication/fig6_gradcam_composite.png)
 
 ### 4.6 External Validation (REQ-04)
-On the Chapman-Shaoxing dataset, the ensemble maintained an **AUROC of 0.844 (95% CI: 0.831 - 0.856)**, demonstrating high discriminative power despite differences in population demographics and recording environments.
+On the Chapman-Shaoxing dataset, the ensemble maintained an **AUROC of 0.799 (95% CI: 0.792 - 0.806)**, demonstrating solid discriminative power despite differences in population demographics and recording environments.
 
 #### 4.6.1 Dataset Mismatch Analysis
 The performance drop in Macro-F1 (0.269) on Chapman-Shaoxing compared to PTB-XL (0.729) is primarily driven by significant differences in class prevalence and labeling protocols:
@@ -116,16 +116,16 @@ The performance drop in Macro-F1 (0.269) on Chapman-Shaoxing compared to PTB-XL 
 *   **Normal (NORM)**: High prevalence (~71% in Chapman vs 44% in PTB-XL) leads to a high weighted-F1 but penalizes the macro-average due to minority class underperformance.
 *   **Demographics**: Mean age in PTB-XL is ~63 years, while Chapman is ~58 years. The older PTB-XL cohort likely exhibits more complex, multi-label abnormalities than the younger Chapman cohort.
 
-| Class | PTB-XL Prev | Chapman Prev | Chapman F1 |
+| Class | PTB-XL Prev | Chapman Prev | Chapman F1 (OVR) |
 | :--- | :---: | :---: | :---: |
-| **NORM** | 43.6% | 70.7% | 0.80 |
-| **MI** | 25.1% | 0.8% | 0.03 |
-| **STTC** | 24.0% | 19.0% | 0.49 |
-| **CD** | 22.5% | 4.4% | 0.02 |
-| **HYP** | 12.2% | 32.2% | 0.00 |
+| **NORM** | 43.6% | 70.7% | 0.78 |
+| **MI** | 25.1% | 0.8% | 0.07 |
+| **STTC** | 24.0% | 19.0% | 0.46 |
+| **CD** | 22.5% | 4.4% | 0.41 |
+| **HYP** | 12.2% | 32.2% | 0.28 |
 
 #### 4.6.2 Error Analysis and Robustness
-The external validation results yield a critical finding: **the model generalizes well only for NORM and STTC classes.** Performance for MI (F1: 0.03), CD (F1: 0.02), and HYP (F1: 0.00) indicates a complete breakdown of discriminative capability for these classes in the Chapman cohort.
+The external validation results yield a critical finding: **the model generalizes well for high-prevalence classes (NORM, STTC) but shows significant performance degradation for minority categories.** While discriminative power remains reasonable (AUROC 0.799), the F1 scores for MI (0.07) and HYP (0.28) indicate that fixed thresholds fail to capture the same signal characteristics under domain shift.
 
 This failure is likely due to the model's sensitivity to lead-specific recording characteristics of PTB-XL that do not transfer to the Chapman environment, combined with the extreme prevalence differences (e.g., MI at 0.8% in Chapman vs 25% in PTB-XL). 
 
@@ -138,7 +138,7 @@ The impact of each project component was evaluated sequentially on the PTB-XL Fo
 | 2 | + Squeeze-and-Excitation | 0.907 | 0.678 | +0.154 |
 | 3 | + Focal Loss | 0.920 | 0.705 | +0.027 |
 | 4 | + Mixup Augmentation | 0.921 | 0.712 | +0.007 |
-| 5 | **+ Threshold Opt. & Ensemble** | **0.918** | **0.729** | **+0.017** |
+| 5 | **+ Threshold Opt. & Ensemble** | **0.918** | **0.715** | **+0.003** |
 
 *(Note: The modest regression in Macro-AUC in the final ensemble (0.918 vs 0.921) is attributed to simple probability averaging, where a highly confident correct prediction from one sub-model can be "diluted" by a less confident prediction from another, even if the resulting F1 score improves due to ensemble robustification and threshold tuning.)*
 
